@@ -6,9 +6,9 @@ from devkb import logging
 from devkb.models import db
 
 
-class ExtracGithubInfo(object):
+class FindRepos(object):
 
-    def __init__(self, skip=0, limit=10000, *arg, **kwargs):
+    def __init__(self, skip=0, limit=0, *arg, **kwargs):
         self.github_regexp = re.compile(
             r'https://github\.com/(?P<ownername>[\w.-]+)/(?P<reponame>[\w.-]+)')
         self.skip = skip
@@ -43,7 +43,7 @@ class ExtracGithubInfo(object):
 
     def run(self):
         logging.info('Proccessed 0 github repos')
-        for question in db.stackoverflow_questions.find():
+        for question in db.stackoverflow_questions.find(skip=self.skip, limit=self.limit):
             mrepos = []
             m = self.github_regexp.search(question['body'])
             if m:
@@ -61,7 +61,7 @@ class ExtracGithubInfo(object):
                     if m:
                         mrepos.append(m)
             self.gen_github_repos(mrepos, question['tags'])
-        for tag in db.stackoverflow_tags.find():
+        for tag in db.stackoverflow_tags.find(skip=self.skip, limit=self.limit):
             mrepos = []
             m = self.github_regexp.search(tag['descr'])
             if m:
