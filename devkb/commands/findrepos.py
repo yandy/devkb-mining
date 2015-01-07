@@ -28,7 +28,7 @@ class FindRepos(BaseCommand):
             fullname = '%s/%s' % m.groups()
             repo = db.github_repos.find_one({'fullname': fullname})
             if repo:
-                otags = set(repo['tags'])
+                otags = set(repo.get('tags', []))
                 ntags = set(tags)
                 etags = list(ntags - otags)
                 if len(etags) > 0:
