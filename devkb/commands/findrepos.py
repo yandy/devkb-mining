@@ -13,45 +13,52 @@ class FindRepos(BaseCommand):
         self.repo_regex = re.compile(
             r'https://github\.com/(?P<ownername>[\w.-]+)/(?P<reponame>[\w.-]+)')
         self.repo_count = 0
+        self.repos = {}
 
     def help(self):
         return 'Find github repos in stackoveflow data'
 
     def add_arguments(self, parser):
         parser.add_argument(
+            '-o', '--out', default='/var/lib/scrapyd/github_repos.txt', help='store github repos url list')
+        parser.add_argument(
             '-k', '--skip', type=int, default=0, help='paginator opt: skip items')
         parser.add_argument(
             '-t', '--limit', type=int, default=0, help='paginator opt: limit items')
 
     def gen_github_repos(self, mrepos, tags):
-        for m in set(mrepos):
+        for m in mrepos:
             fullname = '%s/%s' % m.groups()
-            repo = db.github_repos.find_one({'fullname': fullname})
-            if repo:
-                otags = set(repo.get('tags', []))
-                ntags = set(tags)
-                etags = list(ntags - otags)
-                if len(etags) > 0:
-                    res = db.github_repos.update(
-                        repo, {'$push': {'tags': {'$each': etags}}})
+            if fullname not in self.repos:
+                self.repos[fullname] = 'https://github.com/%s' % fullname
+                print(self.repos[fullname], file=self.repos_f)
+                repo = db.github_repos.find_one({'fullname': fullname})
+                if repo:
+                    otags = set(repo.get('tags', []))
+                    ntags = set(tags)
+                    etags = list(ntags - otags)
+                    if len(etags) > 0:
+                        res = db.github_repos.update(
+                            repo, {'$push': {'tags': {'$each': etags}}})
+                        if res:
+                            logging.debug(
+                                'Updated %s with tags %s', fullname, etags)
+                            self.repo_count += 1
+                else:
+                    doc = {
+                        'fullname': fullname,
+                        'url': 'https://github.com/%s' % fullname,
+                        'tags': tags
+                    }
+                    res = db.github_repos.insert(doc)
                     if res:
-                        logging.debug(
-                            'Updated %s with tags %s', fullname, etags)
+                        logging.debug('Inserted %s', fullname)
                         self.repo_count += 1
-            else:
-                doc = {
-                    'fullname': fullname,
-                    'url': 'https://github.com/%s' % fullname,
-                    'tags': tags
-                }
-                res = db.github_repos.insert(doc)
-                if res:
-                    logging.debug('Inserted %s', fullname)
-                    self.repo_count += 1
-            if self.repo_count != 0 and self.repo_count % 100 == 0:
-                logging.info('Proccessed %d github repos', self.repo_count)
+                if self.repo_count != 0 and self.repo_count % 100 == 0:
+                    logging.info('Proccessed %d github repos', self.repo_count)
 
     def run(self, args):
+        self.repos_f = open(args.out, 'w')
         logging.info('Proccessed 0 github repos')
         for question in db.stackoverflow_questions.find(skip=args.skip, limit=args.limit):
             mrepos = []
@@ -78,3 +85,4 @@ class FindRepos(BaseCommand):
                 mrepos.append(m)
             self.gen_github_repos(mrepos, [tag['name']])
         logging.info('Proccessed %d github repos', self.repo_count)
+        self.repos_f.close()
